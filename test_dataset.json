@@ -1,0 +1,17 @@
+[
+  {
+    "input": "What is the primary advantage of the Transformer model over RNNs?",
+    "actual_output": "The Transformer model allows for significantly more parallelization during training and reduces the path length for dependencies in the network to a constant, unlike RNNs where dependencies decay with distance.",
+    "context": ["Recurrent models generate a sequence of hidden states h_t, as a function of the previous hidden state h_{t-1} and the input for position t. This inherently sequential nature precludes parallelization within training examples."]
+  },
+  {
+    "input": "How does the attention mechanism calculate the weights?",
+    "actual_output": "The attention weights are calculated using a compatibility function of the query with the corresponding key, typically involving a scaled dot-product and a softmax function.",
+    "context": ["We call our particular attention 'Scaled Dot-Product Attention'. The input consists of queries and keys of dimension d_k, and values of dimension d_v."]
+  },
+  {
+    "input": "What optimizer was used for training the Transformer?",
+    "actual_output": "The Adam optimizer was used with beta1=0.9, beta2=0.98, and epsilon=10^-9.",
+    "context": ["We used the Adam optimizer with beta_1 = 0.9, beta_2 = 0.98 and epsilon = 10^{-9}."]
+  }
+]
