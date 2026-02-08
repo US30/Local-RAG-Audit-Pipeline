@@ -67,33 +67,52 @@ def main():
         metrics=[faithfulness, relevancy],
     )
     
-    # 5. SAVE RESULTS (Robust Version)
+   # 5. SAVE RESULTS (Deep Search Version)
     print("💾 Saving results to CSV...")
     df_rows = []
-    
-    for r in results:
-        # Check if 'r' is a standard object or a tuple (fixing the crash)
-        if isinstance(r, tuple):
-            # If it's a tuple, the TestResult object is likely the first item
-            res_obj = r[0] if hasattr(r[0], 'input') else r[1]
-        else:
-            res_obj = r
 
-        # Safely extract reason (sometimes it's missing)
-        faith_reason = res_obj.metrics_data[0].reason if res_obj.metrics_data else "N/A"
-        rel_reason = res_obj.metrics_data[1].reason if len(res_obj.metrics_data) > 1 else "N/A"
+    for i, r in enumerate(results):
+        target_obj = None
+        
+        # Strategy A: Is 'r' the object itself?
+        if hasattr(r, 'input'):
+            target_obj = r
+        
+        # Strategy B: Is it inside a tuple or list?
+        elif isinstance(r, (list, tuple)):
+            for sub_item in r:
+                if hasattr(sub_item, 'input'):
+                    target_obj = sub_item
+                    break
+        
+        # Strategy C: If we still haven't found it, print the structure to debug
+        if target_obj is None:
+            print(f"❌ Result #{i}: Could not find TestResult object!")
+            print(f"   Type: {type(r)}")
+            print(f"   Content: {r}")
+            continue
+
+        # Extract Metrics
+        # We use a helper to avoid index errors if metrics are missing
+        faith_m = target_obj.metrics_data[0] if len(target_obj.metrics_data) > 0 else None
+        rel_m = target_obj.metrics_data[1] if len(target_obj.metrics_data) > 1 else None
 
         df_rows.append({
-            "Input": getattr(res_obj, 'input', 'N/A'),
-            "Actual Output": getattr(res_obj, 'actual_output', 'N/A'),
-            "Faithfulness Score": res_obj.metrics_data[0].score,
-            "Faithfulness Reason": faith_reason,
-            "Relevancy Score": res_obj.metrics_data[1].score,
-            "Relevancy Reason": rel_reason
+            "Input": getattr(target_obj, 'input', 'N/A'),
+            "Actual Output": getattr(target_obj, 'actual_output', 'N/A'),
+            "Faithfulness Score": faith_m.score if faith_m else 0,
+            "Faithfulness Reason": faith_m.reason if faith_m else "N/A",
+            "Relevancy Score": rel_m.score if rel_m else 0,
+            "Relevancy Reason": rel_m.reason if rel_m else "N/A"
         })
     
-    df = pd.DataFrame(df_rows)
-    df.to_csv("benchmark_results.csv", index=False)
-    print("✅ Evaluation Complete! Results saved to 'benchmark_results.csv'")
+    if df_rows:
+        df = pd.DataFrame(df_rows)
+        df.to_csv("benchmark_results.csv", index=False)
+        print(f"✅ Success! Saved {len(df_rows)} rows to 'benchmark_results.csv'")
+    else:
+        print("❌ No results were saved. Check the logs above.")
+
+
 if __name__ == "__main__":
     main()
