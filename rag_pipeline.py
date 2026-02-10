@@ -4,7 +4,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import OllamaLLM
 from langchain_classic.chains import RetrievalQA
 from langchain_classic.prompts import PromptTemplate
-
+from flashrank import Ranker, RerankRequest
 # GLOBAL CONFIG
 DB_URI = "./lancedb_data"
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
@@ -22,18 +22,28 @@ def chat_with_data_setup():
     llm = OllamaLLM(model=LLM_MODEL)
     
     template = """
-    Use the following pieces of context to answer the question at the end. 
-    If you don't know the answer, just say that you don't know, don't try to make up an answer.
-    Context: {context}
-    Question: {question}
-    Helpful Answer:"""
+    You are a precise technical assistant. You must answer the question strictly based on the provided context.
+    
+    Rules:
+    1. Do not add any outside knowledge.
+    2. If the context does not contain the answer, say "I don't know".
+    3. Do not say "According to the context" or "The text mentions"—just give the answer directly.
+    4. Keep the answer under 3 sentences.
+
+    Context:
+    {context}
+
+    Question:
+    {question}
+
+    Answer:"""
     
     QA_CHAIN_PROMPT = PromptTemplate.from_template(template)
 
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="stuff",
-        retriever=vector_store.as_retriever(search_kwargs={"k": 12}),
+        retriever=vector_store.as_retriever(search_kwargs={"k": 15}),
         return_source_documents=True,
         chain_type_kwargs={"prompt": QA_CHAIN_PROMPT}
     )

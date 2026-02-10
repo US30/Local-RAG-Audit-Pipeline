@@ -32,7 +32,7 @@ def ingest_documents():
     # 3. CHUNK (SPLIT) DOCUMENTS
     # M.Tech Level: recursive splitting keeps context better than simple splitting
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
+        chunk_size=600,
         chunk_overlap=200,
         separators=["\n\n", "\n", ".", "!", "?", ",", " ", ""]
     )
