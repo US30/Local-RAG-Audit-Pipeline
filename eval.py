@@ -67,52 +67,56 @@ def main():
         metrics=[faithfulness, relevancy],
     )
     
-   # 5. SAVE RESULTS (Deep Search Version)
+   # 5. SAVE RESULTS (Object-Attribute Fix)
     print("💾 Saving results to CSV...")
+    
+    # 1. Extract the list from the object
+    # The error showed us the data is inside 'test_results'
+    if hasattr(results, 'test_results'):
+        final_results = results.test_results
+    elif isinstance(results, list):
+        final_results = results
+    else:
+        print(f"❌ Error: Unexpected format {type(results)}")
+        print(results)
+        return
+
+    # 2. Extract Data
     df_rows = []
+    for res_obj in final_results:
+        # Safely get metrics (handle missing/empty metrics)
+        faith_score = 0
+        faith_reason = "N/A"
+        rel_score = 0
+        rel_reason = "N/A"
 
-    for i, r in enumerate(results):
-        target_obj = None
-        
-        # Strategy A: Is 'r' the object itself?
-        if hasattr(r, 'input'):
-            target_obj = r
-        
-        # Strategy B: Is it inside a tuple or list?
-        elif isinstance(r, (list, tuple)):
-            for sub_item in r:
-                if hasattr(sub_item, 'input'):
-                    target_obj = sub_item
-                    break
-        
-        # Strategy C: If we still haven't found it, print the structure to debug
-        if target_obj is None:
-            print(f"❌ Result #{i}: Could not find TestResult object!")
-            print(f"   Type: {type(r)}")
-            print(f"   Content: {r}")
-            continue
-
-        # Extract Metrics
-        # We use a helper to avoid index errors if metrics are missing
-        faith_m = target_obj.metrics_data[0] if len(target_obj.metrics_data) > 0 else None
-        rel_m = target_obj.metrics_data[1] if len(target_obj.metrics_data) > 1 else None
+        # Check if metrics_data exists and has items
+        if hasattr(res_obj, 'metrics_data') and res_obj.metrics_data:
+            # Try to find Faithfulness (usually first)
+            if len(res_obj.metrics_data) > 0:
+                faith_score = res_obj.metrics_data[0].score
+                faith_reason = res_obj.metrics_data[0].reason
+            # Try to find Relevancy (usually second)
+            if len(res_obj.metrics_data) > 1:
+                rel_score = res_obj.metrics_data[1].score
+                rel_reason = res_obj.metrics_data[1].reason
 
         df_rows.append({
-            "Input": getattr(target_obj, 'input', 'N/A'),
-            "Actual Output": getattr(target_obj, 'actual_output', 'N/A'),
-            "Faithfulness Score": faith_m.score if faith_m else 0,
-            "Faithfulness Reason": faith_m.reason if faith_m else "N/A",
-            "Relevancy Score": rel_m.score if rel_m else 0,
-            "Relevancy Reason": rel_m.reason if rel_m else "N/A"
+            "Input": getattr(res_obj, 'input', 'N/A'),
+            "Actual Output": getattr(res_obj, 'actual_output', 'N/A'),
+            "Faithfulness Score": faith_score,
+            "Faithfulness Reason": faith_reason,
+            "Relevancy Score": rel_score,
+            "Relevancy Reason": rel_reason
         })
     
+    # 3. Save
     if df_rows:
         df = pd.DataFrame(df_rows)
         df.to_csv("benchmark_results.csv", index=False)
         print(f"✅ Success! Saved {len(df_rows)} rows to 'benchmark_results.csv'")
     else:
-        print("❌ No results were saved. Check the logs above.")
-
+        print("❌ Extracted list was empty. No rows to save.")
 
 if __name__ == "__main__":
     main()
