@@ -14,8 +14,6 @@ ENV/
 # Ignore the actual vector database (it can be regenerated)
 # lancedb_data/
 # *.lance/
-.deepeval/
-deepeval/
 # Ignore source documents (PDFs) to keep repo small
 # (You can remove this line if you WANT to track your PDFs)
 # data/*.pdf
@@ -37,4 +35,4 @@ Thumbs.db
 
 # --- Logs ---
 *.log
-.deepeval/
+# .deepeval/
