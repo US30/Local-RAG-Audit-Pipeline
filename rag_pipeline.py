@@ -4,60 +4,64 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_ollama import OllamaLLM
 from langchain_classic.chains import RetrievalQA
 from langchain_classic.prompts import PromptTemplate
-from flashrank import Ranker, RerankRequest
-# GLOBAL CONFIG
+
+# --- NEW 2026 PHOENIX SETUP ---
+from phoenix.otel import register
+from openinference.instrumentation.langchain import LangChainInstrumentor
+
+# Initialize Tracing (This connects to the Phoenix server)
+tracer_provider = register()
+LangChainInstrumentor().instrument(tracer_provider=tracer_provider)
+# ------------------------------
+
 DB_URI = "./lancedb_data"
 EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-LLM_MODEL = "llama3.1:8b" 
 
-def chat_with_data_setup():
-    """Returns the QA Chain object for use in other scripts"""
+def chat_with_data_setup(model_name="gemma3:4b"):
+    """
+    Creates a RAG chain for a SPECIFIC model.
+    """
+    
+    # 1. SETUP EMBEDDINGS & DB
     embedding_model = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
     db = lancedb.connect(DB_URI)
+    
+    # Connect to existing table
     vector_store = LanceDB(
         connection=db,
         embedding=embedding_model,
-        table_name="rag_test"
+        table_name="rag_test" 
     )
-    llm = OllamaLLM(model=LLM_MODEL)
-    
+
+    # 2. SETUP DYNAMIC LLM
+    llm = OllamaLLM(model=model_name)
+
+    # 3. STRICT SYSTEM PROMPT
     template = """
-    You are a precise technical assistant. You must answer the question strictly based on the provided context.
+    You are a precise technical auditor. Answer the question strictly based on the context below.
     
     Rules:
-    1. Do not add any outside knowledge.
-    2. If the context does not contain the answer, say "I don't know".
-    3. Do not say "According to the context" or "The text mentions"—just give the answer directly.
-    4. Keep the answer under 3 sentences.
-
+    1. If the answer is not in the context, say "I don't know".
+    2. Do not hallucinate facts.
+    3. Keep the answer concise (under 4 sentences).
+    
     Context:
     {context}
-
+    
     Question:
     {question}
-
+    
     Answer:"""
     
     QA_CHAIN_PROMPT = PromptTemplate.from_template(template)
 
+    # 4. BUILD CHAIN
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="stuff",
-        retriever=vector_store.as_retriever(search_kwargs={"k": 15}),
+        retriever=vector_store.as_retriever(search_kwargs={"k": 8}),
         return_source_documents=True,
         chain_type_kwargs={"prompt": QA_CHAIN_PROMPT}
     )
+    
     return qa_chain
-
-# This function keeps the interactive chat working
-def interactive_chat():
-    qa_chain = chat_with_data_setup()
-    print("✅ Pipeline Ready! (Type 'exit' to quit)")
-    while True:
-        query = input("\n❓ Ask a question: ")
-        if query.lower() in ["exit", "quit"]: break
-        result = qa_chain.invoke({"query": query})
-        print(f"\n💡 Answer: {result['result']}")
-
-if __name__ == "__main__":
-    interactive_chat()
