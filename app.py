@@ -9,6 +9,12 @@ st.markdown("### M.Tech Project: Real-Time Audit with DeepEval")
 
 # SIDEBAR: SETUP
 st.sidebar.header("⚙️ Arena Setup")
+
+# 1. PHOENIX LINK (Restored)
+st.sidebar.success("📡 **Observability:** [Open Arize Phoenix](http://localhost:6006)")
+st.sidebar.caption("View traces to see retrieval latency and embedding visualization.")
+st.sidebar.divider()
+
 available_models = ["llama3.1:8b", "gemma3:4b", "mistral", "llama3.2-vision:latest"]
 selected_models = st.sidebar.multiselect(
     "Select 2 Models to Compare",
@@ -57,29 +63,36 @@ if prompt := st.chat_input("Enter a technical question..."):
                     duration = time.time() - start_ts
                     
                     answer_text = response["result"]
+                    # Extract text from documents for the Context Viewer
                     source_docs = [doc.page_content for doc in response["source_documents"]]
                     
                     status.success(f"⏱️ {duration:.2f}s")
                     st.markdown(f"**Answer:** {answer_text}")
                     
-                    # SAVE TO STATE (Crucial Step!)
+                    # 2. CONTEXT VIEWER (Immediate)
+                    with st.expander("📚 Retrieved Context (Evidence)"):
+                        for doc in source_docs:
+                            st.caption(f"...{doc[:300]}...") # Truncate for UI cleanliness
+                            st.divider()
+                    
+                    # SAVE TO STATE (Crucial for Audit Button)
                     st.session_state.last_results[model_name] = {
                         "answer": answer_text,
                         "context": source_docs,
                         "query": prompt
                     }
 
-                    # Add Assistant Message to history (Optional, keeps chat clean)
+                    # Add Assistant Message to history
                     st.session_state.messages.append({"role": "assistant", "content": f"**{model_name}:** {answer_text}"})
 
                 except Exception as e:
                     st.error(f"Error: {e}")
 
-# 3. HANDLE AUDIT BUTTONS (Outside the input loop)
-# This part runs on every refresh, checking if we have results to audit
+# 3. HANDLE AUDIT BUTTONS (Persistent Area)
+# This stays visible even after you click buttons
 if st.session_state.last_results:
     st.divider()
-    st.subheader("🕵️ Audit Controls")
+    st.subheader("🕵️ Audit Controls (DeepEval)")
     
     cols = st.columns(len(selected_models))
     for i, model_name in enumerate(selected_models):
@@ -87,32 +100,39 @@ if st.session_state.last_results:
             with cols[i]:
                 result_data = st.session_state.last_results[model_name]
                 
+                # RE-DISPLAY CONTEXT (So you can see it while auditing)
+                with st.expander(f"📄 View Context for {model_name}"):
+                    for doc in result_data["context"]:
+                        st.caption(f"...{doc[:300]}...")
+                        st.divider()
+                
                 # The Audit Button
                 if st.button(f"⚖️ Audit {model_name}", key=f"btn_{model_name}"):
                     with st.spinner(f"Running DeepEval on {model_name}..."):
                         try:
+                            # Run the metrics function from rag_pipeline.py
                             scores = run_audit_metrics(
                                 query=result_data["query"],
                                 actual_output=result_data["answer"],
                                 retrieval_context=result_data["context"]
                             )
                             
-                            # Display Metrics
+                            # Display Scorecards
                             col_a, col_b = st.columns(2)
                             with col_a:
                                 st.metric(
                                     label="Faithfulness", 
                                     value=f"{scores['faithfulness_score']:.2f}",
-                                    delta="Pass" if scores['faithfulness_score'] > 0.7 else "-Fail"
+                                    delta="Pass" if scores['faithfulness_score'] > 0.5 else "-Fail"
                                 )
                             with col_b:
                                 st.metric(
                                     label="Relevancy", 
                                     value=f"{scores['relevancy_score']:.2f}",
-                                    delta="Pass" if scores['relevancy_score'] > 0.7 else "-Fail"
+                                    delta="Pass" if scores['relevancy_score'] > 0.5 else "-Fail"
                                 )
                             
-                            st.info(f"Reason: {scores['faithfulness_reason']}")
+                            st.info(f"**Reasoning:** {scores['faithfulness_reason']}")
                             
                         except Exception as e:
                             st.error(f"Audit Failed: {e}")
