@@ -16,17 +16,21 @@ selected_models = st.sidebar.multiselect(
     default=["llama3.1:8b", "mistral"],
     max_selections=2
 )
-st.sidebar.info("💡 Tip: Click 'Run Live Audit' after generating answers to see Faithfulness scores.")
 
-# MAIN CHAT
+# --- SESSION STATE SETUP ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "last_results" not in st.session_state:
+    st.session_state.last_results = {} # Stores the RAG answers
 
+# 1. DISPLAY CHAT HISTORY
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+# 2. HANDLE INPUT & GENERATION
 if prompt := st.chat_input("Enter a technical question..."):
+    # Add User Message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
@@ -34,16 +38,19 @@ if prompt := st.chat_input("Enter a technical question..."):
     if len(selected_models) < 1:
         st.error("Please select at least 1 model.")
     else:
+        # Clear previous results for a new query
+        st.session_state.last_results = {}
+        
         cols = st.columns(len(selected_models))
         
+        # Run Generation Loop
         for i, model_name in enumerate(selected_models):
             with cols[i]:
                 st.subheader(f"🤖 {model_name}")
                 status = st.empty()
+                status.info("Generating...")
                 
                 try:
-                    # 1. GENERATION PHASE
-                    status.info("Generating...")
                     start_ts = time.time()
                     chain = chat_with_data_setup(model_name=model_name)
                     response = chain.invoke({"query": prompt})
@@ -55,15 +62,39 @@ if prompt := st.chat_input("Enter a technical question..."):
                     status.success(f"⏱️ {duration:.2f}s")
                     st.markdown(f"**Answer:** {answer_text}")
                     
-                    # 2. AUDIT PHASE (Button to prevent OOM)
-                    audit_key = f"audit_{model_name}_{int(time.time())}"
-                    if st.button(f"⚖️ Run Live Audit for {model_name}", key=audit_key):
-                        with st.spinner("🕵️ Judge (Llama 3) is analyzing truthfulness..."):
-                            # Run DeepEval
+                    # SAVE TO STATE (Crucial Step!)
+                    st.session_state.last_results[model_name] = {
+                        "answer": answer_text,
+                        "context": source_docs,
+                        "query": prompt
+                    }
+
+                    # Add Assistant Message to history (Optional, keeps chat clean)
+                    st.session_state.messages.append({"role": "assistant", "content": f"**{model_name}:** {answer_text}"})
+
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+# 3. HANDLE AUDIT BUTTONS (Outside the input loop)
+# This part runs on every refresh, checking if we have results to audit
+if st.session_state.last_results:
+    st.divider()
+    st.subheader("🕵️ Audit Controls")
+    
+    cols = st.columns(len(selected_models))
+    for i, model_name in enumerate(selected_models):
+        if model_name in st.session_state.last_results:
+            with cols[i]:
+                result_data = st.session_state.last_results[model_name]
+                
+                # The Audit Button
+                if st.button(f"⚖️ Audit {model_name}", key=f"btn_{model_name}"):
+                    with st.spinner(f"Running DeepEval on {model_name}..."):
+                        try:
                             scores = run_audit_metrics(
-                                query=prompt,
-                                actual_output=answer_text,
-                                retrieval_context=source_docs
+                                query=result_data["query"],
+                                actual_output=result_data["answer"],
+                                retrieval_context=result_data["context"]
                             )
                             
                             # Display Metrics
@@ -72,26 +103,16 @@ if prompt := st.chat_input("Enter a technical question..."):
                                 st.metric(
                                     label="Faithfulness", 
                                     value=f"{scores['faithfulness_score']:.2f}",
-                                    delta="Pass" if scores['faithfulness_score'] > 0.7 else "-Fail",
-                                    delta_color="normal"
+                                    delta="Pass" if scores['faithfulness_score'] > 0.7 else "-Fail"
                                 )
                             with col_b:
                                 st.metric(
                                     label="Relevancy", 
                                     value=f"{scores['relevancy_score']:.2f}",
-                                    delta="Pass" if scores['relevancy_score'] > 0.7 else "-Fail",
-                                    delta_color="normal"
+                                    delta="Pass" if scores['relevancy_score'] > 0.7 else "-Fail"
                                 )
-                                
-                            with st.expander("📉 View Audit Reason"):
-                                st.caption(f"**Faithfulness Reason:** {scores['faithfulness_reason']}")
-                                st.caption(f"**Relevancy Reason:** {scores['relevancy_reason']}")
-
-                    # Context Dropdown
-                    with st.expander("📚 Retrieved Context"):
-                        for doc in source_docs:
-                            st.caption(f"...{doc[:200]}...")
-                            st.divider()
-
-                except Exception as e:
-                    st.error(f"Error: {e}")
+                            
+                            st.info(f"Reason: {scores['faithfulness_reason']}")
+                            
+                        except Exception as e:
+                            st.error(f"Audit Failed: {e}")
