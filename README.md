@@ -1,10 +1,5 @@
 # Local RAG Audit Pipeline: Multi-Model Evaluation Arena
 
-### M.Tech Project | Automated Compliance & Hallucination Detection
-**Author:** Utkarsh  
-**Institution:** NMIMS (Data Science & Business Analytics)  
-**Status:** Prototype Complete (Phase 5)
-
 ---
 
 ## Overview
@@ -227,6 +222,3 @@ Tested on **NVIDIA RTX 2070 Super (8GB VRAM) + 16GB System RAM** running Ubuntu 
 
 ---
 
-## License
-
-MIT License. Created for Academic Purposes at NMIMS.
